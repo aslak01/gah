@@ -534,11 +534,21 @@ function command_install() {
 			print_yellow "Unattended mode, using download URL at index $unattended_select_index: $download_url"
 
 		else
-			print_yellow "Please select one:"
-			select url in $download_url; do
-				download_url=$url
-				break
-			done
+			# Route the prompt through the controlling terminal so it's visible
+			# even when stdout/stderr are piped (otherwise the menu is buffered
+			# into the pipe and the user sees a hung process). Fall back to the
+			# standard streams when there is no terminal.
+			local prompt_in=/dev/stdin prompt_out=/dev/stdout
+			if [[ -r /dev/tty && -w /dev/tty ]]; then
+				prompt_in=/dev/tty prompt_out=/dev/tty
+			fi
+			{
+				print_yellow "Please select one:"
+				select url in $download_url; do
+					download_url=$url
+					break
+				done
+			} <"$prompt_in" >"$prompt_out" 2>&1
 
 			if [[ -z "$download_url" ]]; then
 				throw_error 14 "No download URL was selected"
@@ -628,8 +638,17 @@ function command_install() {
 		if [[ "$GAH_UNATTENDED" == "true" ]]; then
 			print_yellow "Using default name: $file_name"
 		else
-			print_yellow "Give a new name or keep '$file_name'? (Leave empty to keep the same)"
-			read -p "New name: " new_name
+			# Route the prompt through the controlling terminal so it's visible
+			# even when stdout/stderr are piped; fall back to the standard
+			# streams when there is no terminal.
+			local prompt_in=/dev/stdin prompt_out=/dev/stdout
+			if [[ -r /dev/tty && -w /dev/tty ]]; then
+				prompt_in=/dev/tty prompt_out=/dev/tty
+			fi
+			{
+				print_yellow "Give a new name or keep '$file_name'? (Leave empty to keep the same)"
+				read -p "New name: " new_name
+			} <"$prompt_in" >"$prompt_out" 2>&1
 			if [[ -n "$new_name" ]]; then
 				file_name="$new_name"
 			fi

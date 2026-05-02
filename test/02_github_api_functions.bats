@@ -54,3 +54,27 @@ teardown() {
 	assert_success
 	assert [ -f "release.json" ]
 }
+
+@test "http_download should invoke curl with -f so HTTP errors fail loudly" {
+	stub curl "-fL -s -o * * : echo OK"
+
+	TEST_TEMP_DIR=$(mktemp -d)
+	cd "$TEST_TEMP_DIR"
+
+	GITHUB_AUTH_ARGS=()
+	run http_download "https://example.com/foo.tar.gz" "foo.tar.gz" true false
+
+	assert_success
+}
+
+@test "http_download should propagate curl failures (e.g. HTTP 404 with -f)" {
+	stub curl "-fL -s -o * * : exit 22"
+
+	TEST_TEMP_DIR=$(mktemp -d)
+	cd "$TEST_TEMP_DIR"
+
+	GITHUB_AUTH_ARGS=()
+	run http_download "https://example.com/foo.tar.gz" "foo.tar.gz" true false
+
+	assert_failure
+}

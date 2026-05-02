@@ -102,13 +102,21 @@ function http_download() {
 	local silent="$3"
 	local progress="$4"
 
+	# When downloading a release asset via the GitHub API
+	# (https://api.github.com/.../releases/assets/N), Accept: application/octet-stream
+	# is required to get the binary back instead of JSON metadata.
+	local extra_headers=()
+	if [[ "$url" == https://api.github.com/* ]]; then
+		extra_headers=(--header "Accept: application/octet-stream")
+	fi
+
 	local silent_option
 	# if curl is available, use it, otherwise use wget.
 	if command -v curl >/dev/null 2>&1; then
 		local curl_progress_option
 		[[ $silent == "true" ]] && silent_option="-s" || silent_option=""
 		[[ $progress == "true" ]] && curl_progress_option="--progress-bar" || curl_progress_option=""
-		curl ${silent_option} -L ${curl_progress_option} "${GITHUB_AUTH_ARGS[@]}" -o "$destination" "$url"
+		curl -fL ${silent_option} ${curl_progress_option} "${GITHUB_AUTH_ARGS[@]}" "${extra_headers[@]}" -o "$destination" "$url"
 	else
 	    # detect if wget is from alpine/busybox or a GNU wget
 		if wget --version >/dev/null 2>&1; then
@@ -118,8 +126,8 @@ function http_download() {
 		fi
 		local wget_progress_option
 		[[ $silent == "true" ]] && silent_option="-q" || silent_option=""
-		[[ $progress == "true" && $is_gnu_wget == "true" ]] && progress_option="--show-progress" || progress_option=""
-		wget ${silent_option} ${wget_progress_option} "${GITHUB_AUTH_ARGS[@]}" -O "$destination" "$url"
+		[[ $progress == "true" && $is_gnu_wget == "true" ]] && wget_progress_option="--show-progress" || wget_progress_option=""
+		wget ${silent_option} ${wget_progress_option} "${GITHUB_AUTH_ARGS[@]}" "${extra_headers[@]}" -O "$destination" "$url"
 	fi
 }
 
@@ -127,13 +135,14 @@ function http_download() {
 #--------------------------------------------------
 #region GitHub Authentication
 
-# Setup GitHub authentication if GITHUB_PAT is provided
-if [[ -n "${GITHUB_PAT:-}" ]]; then
-	GITHUB_AUTH_ARGS=(--header "Authorization: token ${GITHUB_PAT}")
+# Setup GitHub authentication if GITHUB_PAT or GITHUB_TOKEN is provided
+GITHUB_TOKEN_VALUE="${GITHUB_PAT:-${GITHUB_TOKEN:-}}"
+if [[ -n "$GITHUB_TOKEN_VALUE" ]]; then
+	GITHUB_AUTH_ARGS=(--header "Authorization: Bearer ${GITHUB_TOKEN_VALUE}")
 	print_green "Using GitHub Personal Access Token for API requests"
 else
 	GITHUB_AUTH_ARGS=()
-	print_debug "No GITHUB_PAT found - using unauthenticated GitHub API (rate limited to 60 requests/hour)"
+	print_debug "No GITHUB_PAT or GITHUB_TOKEN found - using unauthenticated GitHub API (rate limited to 60 requests/hour)"
 fi
 
 #endregion
@@ -294,7 +303,7 @@ function fetch_release_info() {
 
 		# Check if this is a rate limit error
 		if [[ "$err_message" =~ [Rr]ate.limit ]]; then
-			throw_error 21 "GitHub API rate limit exceeded.\n\nUnauthenticated requests are limited to 60 per hour.\nAuthenticated requests get 5,000 per hour.\n\nTo authenticate, set the GITHUB_PAT environment variable:\n  export GITHUB_PAT=\"your_token_here\"\n\nCreate a token at: https://github.com/settings/tokens"
+			throw_error 21 "GitHub API rate limit exceeded.\n\nUnauthenticated requests are limited to 60 per hour.\nAuthenticated requests get 5,000 per hour.\n\nTo authenticate, set the GITHUB_PAT (or GITHUB_TOKEN) environment variable:\n  export GITHUB_PAT=\"your_token_here\"\n\nCreate a token at: https://github.com/settings/tokens"
 		fi
 
 		throw_error 13 "Couldn't fetch release information.\nResponse from GitHub API [$err_status]: $err_message"
@@ -370,11 +379,18 @@ function find_download_url() {
 	print_debug "No download URLs found!"
 }
 
+function get_api_asset_url() {
+	local release_json="$1"
+	local browser_url="$2"
+
+	jq -r --arg url "$browser_url" '.assets[] | select(.browser_download_url == $url) | .url' "$release_json"
+}
+
 function find_digest_for_url() {
 	local release_json="$1"
 	local download_url="$2"
 
-	print_debug "Finding digest for URL: $url"
+	print_debug "Finding digest for URL: $download_url"
 
 	# Check if the URL is in the assets
 	local digest=$(jq -r --arg url "$download_url" '.assets[] | select(.browser_download_url == $url) | .digest' "$release_json")
@@ -540,6 +556,15 @@ function command_install() {
 	print_debug "Finding digest for download URL"
 	local digest=$(find_digest_for_url "$tmp_dir/release.json" "$download_url")
 	print_debug "OK, digest: $digest"
+
+	# Prefer the API asset URL — it's the documented endpoint for programmatic
+	# downloads and works for private repos. The browser_download_url 404s for
+	# private repos in some auth configurations.
+	local api_url=$(get_api_asset_url "$tmp_dir/release.json" "$download_url")
+	if [[ -n "$api_url" && "$api_url" != "null" ]]; then
+		print_debug "Using API asset URL for download: $api_url"
+		download_url="$api_url"
+	fi
 
 	# Download the file
 	print_blue "Downloading: $filename"

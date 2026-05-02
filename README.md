@@ -116,6 +116,8 @@ To set up authentication:
 export GITHUB_PAT="ghp_your_token_here"
 ```
 
+`GITHUB_TOKEN` is also honored as a fallback (the convention used by the `gh` CLI and GitHub Actions). A token with `repo` scope is required to install from private repositories.
+
 When authenticated, `gah` will display a confirmation message: "Using GitHub Personal Access Token for API requests".
 
 If you encounter a rate limit error, `gah` will provide instructions on how to set up authentication.
@@ -148,7 +150,8 @@ Name | Description | Default
 ---|---|---
 `GAH_INSTALL_DIR` | The directory where the gah will install your applications. This directory must be in your `PATH` environment variable. | `~/.local/bin`, for superuser it will be `/usr/local/bin`
 `GAH_CACHE_DIR` | The directory where cache will be stored. | `~/.cache/gah`
-`GITHUB_PAT` | GitHub Personal Access Token for authenticated API requests. Increases rate limit from 60 to 5,000 requests per hour. Create a token at https://github.com/settings/tokens | None (unauthenticated requests)
+`GITHUB_PAT` | GitHub Personal Access Token for authenticated API requests. Increases rate limit from 60 to 5,000 requests per hour and enables installs from private repositories. Create a token at https://github.com/settings/tokens | None (unauthenticated requests)
+`GITHUB_TOKEN` | Fallback for `GITHUB_PAT` (used when `GITHUB_PAT` is unset). Useful in CI environments. | None
 `GAH_DEBUG` | Enable debug output showing detailed information about the installation process. | `false`
 `GAH_UNATTENDED` | Enable unattended mode, which skips confirmation prompts during installation. | `false`
 

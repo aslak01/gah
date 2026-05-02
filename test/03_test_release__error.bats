@@ -62,7 +62,7 @@ teardown() {
 	assert_output --partial "GitHub API rate limit exceeded."
 	assert_output --partial "Unauthenticated requests are limited to 60 per hour."
 	assert_output --partial "Authenticated requests get 5,000 per hour."
-	assert_output --partial "To authenticate, set the GITHUB_PAT environment variable:"
+	assert_output --partial "To authenticate, set the GITHUB_PAT (or GITHUB_TOKEN) environment variable:"
 	assert_output --partial "export GITHUB_PAT=\"your_token_here\""
 	assert_output --partial "Create a token at: https://github.com/settings/tokens"
 }

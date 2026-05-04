@@ -179,6 +179,7 @@ Thanks to all contributors:
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/ebb-earl-co"><img src="https://avatars.githubusercontent.com/u/11299014?v=4?s=100" width="100px;" alt="Colin Coe"/><br /><sub><b>Colin Coe</b></sub></a><br /><a href="#ideas-ebb-earl-co" title="Ideas, Planning, & Feedback">🤔</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://stafflink.com.au"><img src="https://avatars.githubusercontent.com/u/106497642?v=4?s=100" width="100px;" alt="Richard J"/><br /><sub><b>Richard J</b></sub></a><br /><a href="https://github.com/get-gah/gah/issues?q=author%3Arj-au" title="Bug reports">🐛</a></td>
       <td align="center" valign="top" width="14.28%"><a href="http://zansh.in"><img src="https://avatars.githubusercontent.com/u/824991?v=4?s=100" width="100px;" alt="Conan"/><br /><sub><b>Conan</b></sub></a><br /><a href="https://github.com/get-gah/gah/issues?q=author%3Ashuckster" title="Bug reports">🐛</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/AndreiCherniaev"><img src="https://avatars.githubusercontent.com/u/27889022?v=4?s=100" width="100px;" alt="Andrei Cherniaev"/><br /><sub><b>Andrei Cherniaev</b></sub></a><br /><a href="#ideas-AndreiCherniaev" title="Ideas, Planning, & Feedback">🤔</a></td>
     </tr>
   </tbody>
 </table>

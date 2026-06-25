@@ -102,12 +102,17 @@ function http_download() {
 	local silent="$3"
 	local progress="$4"
 
-	# When downloading a release asset via the GitHub API
-	# (https://api.github.com/.../releases/assets/N), Accept: application/octet-stream
-	# is required to get the binary back instead of JSON metadata.
+	# Only talk to the GitHub API with credentials. The token (and the
+	# Accept: application/octet-stream header that makes the API hand back the
+	# binary instead of JSON metadata) must go to api.github.com only. Release
+	# assets redirect to a short-lived presigned storage URL that needs no auth;
+	# forwarding the token there would leak it (wget resends headers across
+	# redirects) and can make the storage backend reject the request.
 	local extra_headers=()
+	local auth_args=()
 	if [[ "$url" == https://api.github.com/* ]]; then
 		extra_headers=(--header "Accept: application/octet-stream")
+		auth_args=("${GITHUB_AUTH_ARGS[@]}")
 	fi
 
 	local silent_option
@@ -116,7 +121,7 @@ function http_download() {
 		local curl_progress_option
 		[[ $silent == "true" ]] && silent_option="-s" || silent_option=""
 		[[ $progress == "true" ]] && curl_progress_option="--progress-bar" || curl_progress_option=""
-		curl -fL ${silent_option} ${curl_progress_option} "${GITHUB_AUTH_ARGS[@]}" "${extra_headers[@]}" -o "$destination" "$url"
+		curl -fL ${silent_option} ${curl_progress_option} "${auth_args[@]}" "${extra_headers[@]}" -o "$destination" "$url"
 	else
 	    # detect if wget is from alpine/busybox or a GNU wget
 		if wget --version >/dev/null 2>&1; then
@@ -127,7 +132,7 @@ function http_download() {
 		local wget_progress_option
 		[[ $silent == "true" ]] && silent_option="-q" || silent_option=""
 		[[ $progress == "true" && $is_gnu_wget == "true" ]] && wget_progress_option="--show-progress" || wget_progress_option=""
-		wget ${silent_option} ${wget_progress_option} "${GITHUB_AUTH_ARGS[@]}" "${extra_headers[@]}" -O "$destination" "$url"
+		wget ${silent_option} ${wget_progress_option} "${auth_args[@]}" "${extra_headers[@]}" -O "$destination" "$url"
 	fi
 }
 
@@ -386,6 +391,30 @@ function get_api_asset_url() {
 	jq -r --arg url "$browser_url" '.assets[] | select(.browser_download_url == $url) | .url' "$release_json"
 }
 
+# Resolve a GitHub API asset URL (api.github.com/.../releases/assets/N) to the
+# short-lived presigned storage URL it redirects to, sending the token only to
+# the API and stopping before the redirect. The caller then downloads the
+# resolved URL with no auth, so the token never reaches the storage backend.
+# Prints nothing if the URL can't be resolved.
+function resolve_github_asset_url() {
+	local api_url="$1"
+
+	if command -v curl >/dev/null 2>&1; then
+		curl -s -o /dev/null -w '%{redirect_url}' \
+			"${GITHUB_AUTH_ARGS[@]}" \
+			--header "Accept: application/octet-stream" \
+			"$api_url"
+	elif wget --version >/dev/null 2>&1; then
+		# GNU wget: stop at the 302 and read the Location header instead of
+		# following it (which would resend the token to storage).
+		wget -S --max-redirect=0 -O /dev/null \
+			"${GITHUB_AUTH_ARGS[@]}" \
+			--header "Accept: application/octet-stream" \
+			"$api_url" 2>&1 \
+			| awk 'tolower($1) == "location:" { print $2; exit }'
+	fi
+}
+
 function find_digest_for_url() {
 	local release_json="$1"
 	local download_url="$2"
@@ -567,13 +596,22 @@ function command_install() {
 	local digest=$(find_digest_for_url "$tmp_dir/release.json" "$download_url")
 	print_debug "OK, digest: $digest"
 
-	# Prefer the API asset URL — it's the documented endpoint for programmatic
-	# downloads and works for private repos. The browser_download_url 404s for
-	# private repos in some auth configurations.
+	# Private-repo assets can't be fetched from browser_download_url; the API
+	# asset endpoint is the documented path. Resolve it to its presigned storage
+	# URL up front (sending the token only to the API) and download that without
+	# auth. If resolution fails, fall back to the API URL itself — curl strips
+	# the token on the cross-host redirect; wget-only setups may not, but it
+	# beats a guaranteed 404 on private repos.
 	local api_url=$(get_api_asset_url "$tmp_dir/release.json" "$download_url")
 	if [[ -n "$api_url" && "$api_url" != "null" ]]; then
-		print_debug "Using API asset URL for download: $api_url"
-		download_url="$api_url"
+		local resolved_url=$(resolve_github_asset_url "$api_url")
+		if [[ -n "$resolved_url" ]]; then
+			print_debug "Resolved asset to storage URL"
+			download_url="$resolved_url"
+		else
+			print_debug "Could not resolve asset URL; using API URL: $api_url"
+			download_url="$api_url"
+		fi
 	fi
 
 	# Download the file

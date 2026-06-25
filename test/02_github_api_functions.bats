@@ -78,3 +78,17 @@ teardown() {
 
 	assert_failure
 }
+
+@test "http_download should not send the auth token to non-GitHub-API hosts" {
+	# The stub only matches the exact 5-arg invocation; if the token leaked,
+	# curl would be called with extra --header args and the match would fail.
+	stub curl "-fL -s -o * * : echo OK"
+
+	TEST_TEMP_DIR=$(mktemp -d)
+	cd "$TEST_TEMP_DIR"
+
+	GITHUB_AUTH_ARGS=(--header "Authorization: Bearer secret")
+	run http_download "https://example.com/foo.tar.gz" "foo.tar.gz" true false
+
+	assert_success
+}
